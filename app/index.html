@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Chat App</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+</head>
+
+<body>
+    <div id="root"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/16.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.24.0/babel.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
+    <script src="https://use.fontawesome.com/029943508e.js"></script>
+    <script type="text/babel">
+        const socket = io.connect();
+        var otherUser = true;
+        const colors = ["#1abc9c", "#8e44ad", "#2c3e50", "#c0392b", "#d35400", "#f39c12"];
+        const sideLeft = false;
+        function capitialize(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+        }
+        function randomNumber(range) {
+            return Math.floor(Math.random() * range);
+        }
+        socket.on("usernames", data => {
+            if (localStorage.getItem("logged") != "")
+                document.getElementById("users_shower").innerHTML = `${data.length} participants`;
+        });
+        socket.on("user_leaved", name => {
+            document.getElementById("messages").innerHTML += `<p class="text-muted text-center">${capitialize(name)} left</p>`;
+        });
+        socket.on("savedMessage", data => {
+            document.getElementById("messages").innerHTML += `<div style="background-color: ${colors[randomNumber(colors.length)]};color: #fff;">${capitialize(data.user)} -- ${data.message}</div>`;
+            $("#messages").animate({ scrollTop: $("#messages")[0].scrollHeight}, 10);
+        });
+        socket.on("message", data => {
+            if (otherUser) {
+                document.getElementById("newMSG").play();
+            }
+            console.log(data)
+            document.getElementById("messages").innerHTML += `<div>${data.user} -- ${data.message}</div>`;
+            otherUser = true;
+        });
+        socket.on("newUserAdded", name => {
+            console.log("added", name);
+            if (!(name == localStorage.getItem("logged"))) document.getElementById("messages").innerHTML += `<p class="text-muted text-center">${capitialize(name)} joined</p>`;
+        });
+        class App extends React.Component {
+            constructor() {
+                super();
+                this.state = {
+                    nickName: "",
+                    loading: false,
+                    logged: false,
+                    msg: ""
+                }
+            }
+            componentWillMount = () => {
+                if (localStorage.getItem("logged") != "") {
+                    this.setState({ logged: true });
+                    socket.emit("new user", localStorage.getItem("logged"), response => {
+                    });
+                }
+            }
+            nickNameSaver = (e) => {
+                this.setState({ nickName: e.target.value });
+            }
+            submit = (e) => {
+                e.preventDefault();
+                if (this.state.nickName) {
+                    socket.connect();
+                    this.setState({ loading: true });
+                    socket.emit("new user", this.state.nickName, response => {
+                        if (response) {
+                            this.setState({ logged: true });
+                            localStorage.setItem("logged", this.state.nickName);
+                        } else {
+                            document.getElementById("nickname_indicator").innerHTML = "Nickname is already in use!";
+                        }
+                    });
+                    this.setState({ loading: false });
+                }
+            }
+            logout = () => {
+                this.setState({ logged: false });
+                localStorage.setItem("logged", "");
+                socket.disconnect();
+            }
+            newMessage = (e) => {
+                e.preventDefault();
+                if (this.state.msg) {
+                    socket.emit("incoming message", this.state.msg);
+                    document.getElementById("msg_field").value = "";
+                    $("#messages").animate({ scrollTop: $("#messages")[0].scrollHeight}, 1000);
+                    otherUser = false;
+                }
+            }
+            componentDidMount = () => {
+                $("#messages").animate({ scrollTop: $("#messages")[0].scrollHeight}, 1000);
+            }
+            render() {
+                if (this.state.logged) {
+                    return (
+                        <div>
+                            <audio id="newMSG">
+                                <source src="new_Message.mp3" type="audio/mp3" />
+                            </audio>
+                            <nav className="navbar navbar-inverse">
+                                <div className="container-fluid">
+                                    <div className="navbar-header">
+                                        <a className="navbar-brand" href="#">Chat App</a>
+                                    </div>
+                                    <ul className="nav navbar-nav" >
+                                        <li className="active"><a href="#">Home</a></li>
+                                    </ul>
+                                    <ul className="nav navbar-nav navbar-right">
+                                        <li><a href="#" onClick={this.logout}>LogOut</a></li>
+                                    </ul>
+                                </div>
+                            </nav>
+                            <div className="container-fluid">
+                                <div id="messages" className="col-md-offset-3 col-md-6" style={{ height: 550, overflow: "scroll" }}>
+                                    <p className="text-muted text-center" id="users_shower"></p>
+                                </div>
+                                <div className="col-md-offset-3" id="sendMessage">
+                                    <form onSubmit={this.newMessage} className="row">
+                                        <input style={{ height: 35, border: 0 }} onChange={e => { this.setState({ msg: e.target.value }) }} id="msg_field" className="col-md-7 col-sm-11 col-xs-10" />
+                                        <button type="submit" className="col-md-1 col-sm-1 col-xs-2 btn btn-default"><i class="fa fa-2x fa-paper-plane" aria-hidden="true"></i></button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                } else {
+                    return (
+                        <div>
+                            <nav className="navbar navbar-inverse">
+                                <div className="container-fluid">
+                                    <div className="navbar-header">
+                                        <a className="navbar-brand" href="#">Chat App</a>
+                                    </div>
+                                    <ul id="navs" className="nav navbar-nav" >
+                                        <li className="active"><a href="#">Home</a></li>
+                                    </ul>
+                                </div>
+                            </nav>
+                            <form style={{ marginTop: 100 }} onSubmit={this.submit}>
+                                <div className="col-md-offset-4 col-md-4">
+                                    <div className="form-group">
+                                        <label className="col-md-offset-2" style={{ fontSize: "200%" }}>What's your Nickname?</label>
+                                        <input onChange={this.nickNameSaver} type="text" className="form-control" id="nickname" placeholder="NickName" />
+                                        <span className="help-block" id="nickname_indicator"></span>
+                                    </div>
+                                    <button disabled={this.state.loading} className="btn btn-primary">Start Chatting!</button>
+                                </div>
+                            </form>
+                        </div>
+                    );
+                }
+            }
+        }
+        ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+</body>
+
+</html>
